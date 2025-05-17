@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>FDownloader MP4 & MP3</title>
+<style>
+  body {
+    font-family: 'Segoe UI', sans-serif;
+    background: #f0f2f5;
+    margin: 0;
+    padding: 20px;
+    color: #333;
+  }
+
+  .container {
+    max-width: 600px;
+    margin: auto;
+    background: white;
+    padding: 25px;
+    border-radius: 15px;
+    box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+  }
+
+  h1 {
+    text-align: center;
+    color: #1e88e5;
+  }
+
+  label {
+    display: block;
+    margin-top: 15px;
+    font-weight: bold;
+  }
+
+  input, select, button {
+    width: 100%;
+    padding: 12px;
+    margin-top: 6px;
+    border-radius: 8px;
+    border: 1px solid #ccc;
+    box-sizing: border-box;
+  }
+
+  button {
+    background: #1e88e5;
+    color: white;
+    border: none;
+    font-size: 16px;
+    cursor: pointer;
+    transition: 0.3s ease;
+  }
+
+  button:hover {
+    background: #1565c0;
+  }
+
+  #info {
+    margin-top: 20px;
+    display: none;
+    border-top: 1px solid #ddd;
+    padding-top: 15px;
+  }
+
+  #thumbnail {
+    width: 100%;
+    max-width: 320px;
+    border-radius: 10px;
+    margin: 10px 0;
+  }
+
+  .info-item {
+    margin: 5px 0;
+  }
+
+  #message {
+    margin-top: 15px;
+    font-weight: bold;
+    text-align: center;
+  }
+
+  .loading {
+    display: inline-block;
+    width: 20px;
+    height: 20px;
+    border: 3px solid #ccc;
+    border-top-color: #1e88e5;
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+    margin-left: 10px;
+    vertical-align: middle;
+  }
+
+  @keyframes spin {
+    to { transform: rotate(360deg); }
+  }
+
+  .success { color: green; }
+  .error { color: red; }
+
+</style>
+</head>
+<body>
+  <div class="container">
+    <h1>FDownloader</h1>
+
+    <label for="url">Masukkan URL video:</label>
+    <input type="url" id="url" placeholder="" required />
+
+    <button id="loadInfoBtn">Load Info Video</button>
+
+    <div id="info">
+      <h3>Info Video:</h3>
+      <img id="thumbnail" src="" alt="Thumbnail" />
+      <div class="info-item"><b>Judul:</b> <span id="title"></span></div>
+      <div class="info-item"><b>Durasi:</b> <span id="duration"></span> detik</div>
+      <div class="info-item"><b>Uploader:</b> <span id="uploader"></span></div>
+    </div>
+
+    <label for="format">Pilih Format Download:</label>
+    <select id="format" required>
+      <option value="mp4">MP4 (Video)</option>
+      <option value="mp3">MP3 (Audio)</option>
+    </select>
+
+    <button id="downloadBtn">Download</button>
+
+    <p id="message"></p>
+  </div>
+
+  <script>
+    const loadInfoBtn = document.getElementById('loadInfoBtn');
+    const downloadBtn = document.getElementById('downloadBtn');
+    const urlInput = document.getElementById('url');
+    const infoDiv = document.getElementById('info');
+    const messageP = document.getElementById('message');
+    const thumbnailImg = document.getElementById('thumbnail');
+    const titleSpan = document.getElementById('title');
+    const durationSpan = document.getElementById('duration');
+    const uploaderSpan = document.getElementById('uploader');
+
+    function setLoadingMessage(text) {
+      messageP.innerHTML = text + '<span class="loading"></span>';
+    }
+
+    loadInfoBtn.addEventListener('click', async () => {
+      const url = urlInput.value.trim();
+      if (!url) {
+        messageP.innerHTML = '<span class="error">Masukkan URL terlebih dahulu!</span>';
+        return;
+      }
+
+      setLoadingMessage('Mengambil info video...');
+      infoDiv.style.display = 'none';
+
+      try {
+        const res = await fetch('/load_info', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({url})
+        });
+
+        const data = await res.json();
+        if (res.ok) {
+          thumbnailImg.src = data.thumbnail;
+          titleSpan.textContent = data.title;
+          durationSpan.textContent = data.duration;
+          uploaderSpan.textContent = data.uploader;
+          infoDiv.style.display = 'block';
+          messageP.innerHTML = '';
+        } else {
+          messageP.innerHTML = '<span class="error">' + (data.error || 'Gagal load info') + '</span>';
+        }
+      } catch (e) {
+        messageP.innerHTML = '<span class="error">Error saat mengambil info.</span>';
+      }
+    });
+
+    downloadBtn.addEventListener('click', async () => {
+  const url = urlInput.value.trim();
+  const format = document.getElementById('format').value;
+  if (!url) {
+    messageP.innerHTML = '<span class="error">Masukkan URL terlebih dahulu!</span>';
+    return;
+  }
+
+  setLoadingMessage('Memulai download...');
+
+  try {
+    const res = await fetch('/download', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({url, format})
+    });
+
+    if (!res.ok) {
+      const data = await res.json();
+      messageP.innerHTML = '<span class="error">' + (data.error || 'Download gagal.') + '</span>';
+      return;
+    }
+
+    const blob = await res.blob();
+
+    // 🔽 Buat nama file dari judul video
+    let rawTitle = titleSpan.textContent || 'unduhan';
+    let safeTitle = rawTitle.replace(/[<>:"/\\|?*\x00-\x1F]/g, '').trim();
+    const filename = format === 'mp3' ? `${safeTitle}.mp3` : `${safeTitle}.mp4`;
+
+    const link = document.createElement('a');
+    link.href = window.URL.createObjectURL(blob);
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+
+    messageP.innerHTML = '<span class="success">✅ Download selesai!</span>';
+  } catch(e) {
+    messageP.innerHTML = '<span class="error">Terjadi kesalahan saat download.</span>';
+  }
+});
+  </script>
+</body>
+</html>
